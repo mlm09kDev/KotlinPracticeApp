@@ -11,6 +11,7 @@ import android.widget.SeekBar
 import android.widget.TimePicker
 import com.mlm09kdev.kotlinpracticeapp.utils.PreferenceUtils
 import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.android.synthetic.main.content_timer.*
 
 
 class MainActivity : AppCompatActivity() {
@@ -86,7 +87,85 @@ class MainActivity : AppCompatActivity() {
             PreferenceUtils.getSecondsRemaining(this)
         else
             timerLengthSeconds
+
+
+        if (timerState == TimerState.Running)
+            startTimer()
+
+        updateButtons()
+        updateCountdownUI()
     }
+
+    private fun onTimerFinished(){
+        timerState = TimerState.Stopped
+
+        setNewTimerLength()
+        progressBarView.progress = 0
+
+        PreferenceUtils.setSecondsRemaining(timerLengthSeconds, this)
+        secondsRemaining = timerLengthSeconds
+
+        updateButtons()
+        updateCountdownUI()
+    }
+
+    private fun startTimer(){
+        timerState = TimerState.Running
+
+        timer = object : CountDownTimer(secondsRemaining * 1000, 1000){
+            override fun onFinish()  = onTimerFinished()
+
+            override fun onTick(millisUntilFinished: Long) {
+                secondsRemaining =  millisUntilFinished / 1000
+                updateCountdownUI()
+            }
+        }.start()
+    }
+
+    private fun setNewTimerLength(){
+        val lengthInMinutes = PreferenceUtils.getTimerLength(this)
+        timerLengthSeconds = (lengthInMinutes * 60L)
+        progressBarView.max = timerLengthSeconds.toInt()
+
+    }
+
+    private fun setPreviousTimerLength(){
+        timerLengthSeconds = PreferenceUtils.getPreviousTimerLengthSeconds(this)
+        progressBarView.max = timerLengthSeconds.toInt()
+    }
+
+    private fun updateCountdownUI(){
+        val minutesUntilFinished = secondsRemaining / 60
+        val secondsInMinuteUntilFinished = secondsRemaining - minutesUntilFinished * 60
+        val secondString = secondsInMinuteUntilFinished.toString()
+        countDownTextView.text = "$minutesUntilFinished:${
+            if(secondString.length == 2)
+                secondString
+            else
+                "0" + secondString}"
+
+        progressBarView.progress = (timerLengthSeconds - secondsRemaining).toInt()
+    }
+    private fun updateButtons(){
+        when (timerState){
+            TimerState.Running ->{
+                fab_start_button.isEnabled = false
+                fab_pause_button.isEnabled = true
+                fab_stop_button.isEnabled = true
+            }
+            TimerState.Stopped ->{
+                fab_start_button.isEnabled = true
+                fab_pause_button.isEnabled = false
+                fab_stop_button.isEnabled = false
+            }
+            TimerState.Paused ->{
+                fab_start_button.isEnabled = true
+                fab_pause_button.isEnabled = false
+                fab_stop_button.isEnabled = true
+            }
+        }
+    }
+
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         // Inflate the menu; this adds items to the action bar if it is present.
