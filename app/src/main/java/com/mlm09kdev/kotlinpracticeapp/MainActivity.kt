@@ -1,31 +1,56 @@
 package com.mlm09kdev.kotlinpracticeapp
 
 
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.os.CountDownTimer
-import android.support.design.widget.Snackbar
 import android.support.v7.app.AppCompatActivity
 import android.view.Menu
 import android.view.MenuItem
-import android.widget.SeekBar
-import android.widget.TimePicker
 import com.mlm09kdev.kotlinpracticeapp.utils.PreferenceUtils
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.content_timer.*
+import java.util.*
 
 
 class MainActivity : AppCompatActivity() {
 
-    enum class  TimerState{
+    companion object {
+        fun setAlarm(context: Context, nowSeconds: Long, secondsRemaining: Long): Long {
+            val wakeUpTime = (nowSeconds + secondsRemaining) * 1000
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, TimerExpiredReceiver::class.java)
+            val pendingIntent = PendingIntent.getBroadcast(context, 0, intent, 0)
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, wakeUpTime, pendingIntent)
+            PreferenceUtils.setAlarmSetTIme(context, nowSeconds)
+            return wakeUpTime
+        }
+
+        fun removeAlarm(context: Context) {
+            val intent = Intent(context, TimerExpiredReceiver::class.java)
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val pendingIntent = PendingIntent.getBroadcast(context, 0, intent, 0)
+
+            alarmManager.cancel(pendingIntent)
+            PreferenceUtils.setAlarmSetTIme(context, 0)
+        }
+
+        val nowSeconds: Long
+            get() = Calendar.getInstance().timeInMillis / 1000
+    }
+
+    enum class TimerState {
         Stopped, Paused, Running
     }
 
-    private lateinit var  timer: CountDownTimer
+    private lateinit var timer: CountDownTimer
     private var timerLengthSeconds = 0L
     private var timerState: TimerState = TimerState.Stopped
 
     private var secondsRemaining = 0L
-
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,48 +80,54 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-    initTimer()
+        initTimer()
+
+        removeAlarm(this)
     }
 
     override fun onPause() {
         super.onPause()
 
-        if(timerState == TimerState.Running){
+        if (timerState == TimerState.Running) {
             timer.cancel()
+            val wakeUpTime = setAlarm(this, nowSeconds, secondsRemaining)
+            //TODO: show notifications
 
-        }
-        else if (timerState == TimerState.Paused)
-        {
-
+        } else if (timerState == TimerState.Paused) {
+            //TODO: show notifications
         }
         PreferenceUtils.setPreviousTimerLengthSeconds(timerLengthSeconds, this)
         PreferenceUtils.setSecondsRemaining(secondsRemaining, this)
         PreferenceUtils.setTimerState(timerState, this)
     }
 
-    fun initTimer(){
+    fun initTimer() {
         timerState = PreferenceUtils.getTimerState(this)
-        if(timerState == TimerState.Stopped){
+        if (timerState == TimerState.Stopped) {
             setNewTimerLength()
-        }
-        else{
+        } else {
             setPreviousTimerLength()
         }
 
-        secondsRemaining = if(timerState == TimerState.Running || timerState == TimerState.Paused)
+        secondsRemaining = if (timerState == TimerState.Running || timerState == TimerState.Paused)
             PreferenceUtils.getSecondsRemaining(this)
         else
             timerLengthSeconds
 
+        val alarmSetTime = PreferenceUtils.getAlarmSetTIme(this)
+        if(alarmSetTime > 0)
+            secondsRemaining -= nowSeconds - alarmSetTime
 
-        if (timerState == TimerState.Running)
+        if(secondsRemaining <= 0)
+            onTimerFinished()
+        else if (timerState == TimerState.Running)
             startTimer()
 
         updateButtons()
         updateCountdownUI()
     }
 
-    private fun onTimerFinished(){
+    private fun onTimerFinished() {
         timerState = TimerState.Stopped
 
         setNewTimerLength()
@@ -109,56 +140,57 @@ class MainActivity : AppCompatActivity() {
         updateCountdownUI()
     }
 
-    private fun startTimer(){
+    private fun startTimer() {
         timerState = TimerState.Running
 
-        timer = object : CountDownTimer(secondsRemaining * 1000, 1000){
-            override fun onFinish()  = onTimerFinished()
+        timer = object : CountDownTimer(secondsRemaining * 1000, 1000) {
+            override fun onFinish() = onTimerFinished()
 
             override fun onTick(millisUntilFinished: Long) {
-                secondsRemaining =  millisUntilFinished / 1000
+                secondsRemaining = millisUntilFinished / 1000
                 updateCountdownUI()
             }
         }.start()
     }
 
-    private fun setNewTimerLength(){
+    private fun setNewTimerLength() {
         val lengthInMinutes = PreferenceUtils.getTimerLength(this)
         timerLengthSeconds = (lengthInMinutes * 60L)
         progressBarView.max = timerLengthSeconds.toInt()
 
     }
 
-    private fun setPreviousTimerLength(){
+    private fun setPreviousTimerLength() {
         timerLengthSeconds = PreferenceUtils.getPreviousTimerLengthSeconds(this)
         progressBarView.max = timerLengthSeconds.toInt()
     }
 
-    private fun updateCountdownUI(){
+    private fun updateCountdownUI() {
         val minutesUntilFinished = secondsRemaining / 60
         val secondsInMinuteUntilFinished = secondsRemaining - minutesUntilFinished * 60
         val secondString = secondsInMinuteUntilFinished.toString()
         countDownTextView.text = "$minutesUntilFinished:${
-            if(secondString.length == 2)
-                secondString
-            else
-                "0" + secondString}"
+        if (secondString.length == 2)
+            secondString
+        else
+            "0" + secondString}"
 
         progressBarView.progress = (timerLengthSeconds - secondsRemaining).toInt()
     }
-    private fun updateButtons(){
-        when (timerState){
-            TimerState.Running ->{
+
+    private fun updateButtons() {
+        when (timerState) {
+            TimerState.Running -> {
                 fab_start_button.isEnabled = false
                 fab_pause_button.isEnabled = true
                 fab_stop_button.isEnabled = true
             }
-            TimerState.Stopped ->{
+            TimerState.Stopped -> {
                 fab_start_button.isEnabled = true
                 fab_pause_button.isEnabled = false
                 fab_stop_button.isEnabled = false
             }
-            TimerState.Paused ->{
+            TimerState.Paused -> {
                 fab_start_button.isEnabled = true
                 fab_pause_button.isEnabled = false
                 fab_stop_button.isEnabled = true

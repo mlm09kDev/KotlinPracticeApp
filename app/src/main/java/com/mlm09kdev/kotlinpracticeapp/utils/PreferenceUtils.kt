@@ -55,5 +55,18 @@ class PreferenceUtils {
             editor.apply()
         }
 
+        private const val ALARM_SET_TIME_ID = "com.mlm09kdev.kotlinpracticeapp.background_timer"
+        fun getAlarmSetTIme(context: Context): Long{
+            val preference = PreferenceManager.getDefaultSharedPreferences(context)
+            return preference.getLong(ALARM_SET_TIME_ID, 0)
+        }
+
+        fun setAlarmSetTIme(context: Context, time: Long){
+            val editor = PreferenceManager.getDefaultSharedPreferences(context).edit()
+            editor.putLong(ALARM_SET_TIME_ID, time)
+            editor.apply()
+
+        }
+
     }
 }
